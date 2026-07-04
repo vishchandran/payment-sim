@@ -6,6 +6,8 @@ It is intentionally small enough to read end to end, while still demonstrating r
 
 ## Architecture
 
+Interactive architecture flow: [payment-sim visualizer](https://payment-sim-visualizer-lab.vercel.app/)
+
 ```text
 Client / Merchant
   |
