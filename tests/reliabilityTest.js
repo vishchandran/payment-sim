@@ -210,14 +210,16 @@ async function testConcurrentOutboxProcessors() {
 
 async function testDuplicateBullMqJobIgnored() {
   const txnId = `rel-worker-${crypto.randomUUID()}`;
+  const fromAccount = `acct-worker-from-${crypto.randomUUID().slice(0, 11)}`;
+  const toAccount = `acct-worker-to-${crypto.randomUUID().slice(0, 11)}`;
   const now = new Date().toISOString();
   const fullTxn = {
     id: txnId,
     idempotencyKey: `worker-${txnId}`,
     requestHash: crypto.createHash("sha256").update(txnId).digest("hex"),
     amount: 500,
-    fromAccount: "A123",
-    toAccount: "B456",
+    fromAccount,
+    toAccount,
     type: "PURCHASE",
     channel: "DOMESTIC_POS",
     issuerType: "INTERNAL",
@@ -233,6 +235,13 @@ async function testDuplicateBullMqJobIgnored() {
     ],
   };
 
+  await pool.query(
+    `
+    INSERT INTO issuer_accounts (account_id, available_balance, currency, status)
+    VALUES ($1, 1000, 'USD', 'ACTIVE'), ($2, 100, 'USD', 'ACTIVE')
+    `,
+    [fromAccount, toAccount]
+  );
   await saveTransactionWithOutbox(fullTxn);
 
   const first = await handleTransactionJob(
@@ -249,6 +258,8 @@ async function testDuplicateBullMqJobIgnored() {
   assert(second.skipped === true, "duplicate job should be skipped");
   assert(row.status === "COMPLETED", "transaction should remain completed");
 
+  await pool.query("DELETE FROM issuer_ledger_entries WHERE txn_id = $1", [txnId]);
+  await pool.query("DELETE FROM issuer_accounts WHERE account_id = ANY($1)", [[fromAccount, toAccount]]);
   await pool.query("DELETE FROM outbox_events WHERE txn_id = $1", [txnId]);
   await pool.query("DELETE FROM transactions WHERE txn_id = $1", [txnId]);
 
@@ -349,6 +360,139 @@ async function testOutboxMaxRecoveryFailure() {
   console.log("PASS outbox max recovery moves event to OUTBOX_FAILED");
 }
 
+async function testInternalIssuerLedgerDebitCredit() {
+  const txnId = `rel-ledger-${crypto.randomUUID()}`;
+  const fromAccount = `acct-from-${crypto.randomUUID().slice(0, 18)}`;
+  const toAccount = `acct-to-${crypto.randomUUID().slice(0, 18)}`;
+  const now = new Date().toISOString();
+  const fullTxn = {
+    id: txnId,
+    idempotencyKey: `ledger-${txnId}`,
+    requestHash: crypto.createHash("sha256").update(txnId).digest("hex"),
+    amount: 125,
+    fromAccount,
+    toAccount,
+    type: "PURCHASE",
+    channel: "DOMESTIC_POS",
+    issuerType: "INTERNAL",
+    pinVerified: true,
+    status: "ACCEPTED",
+    retryCount: 0,
+    processingTimeline: [
+      {
+        status: "ACCEPTED",
+        timestamp: now,
+        message: "Transaction accepted by issuer ledger test",
+      },
+    ],
+  };
+
+  await pool.query(
+    `
+    INSERT INTO issuer_accounts (account_id, available_balance, currency, status)
+    VALUES ($1, 500, 'USD', 'ACTIVE'), ($2, 50, 'USD', 'ACTIVE')
+    `,
+    [fromAccount, toAccount]
+  );
+  await saveTransactionWithOutbox(fullTxn);
+
+  const result = await handleTransactionJob(
+    { id: `job-${txnId}`, data: fullTxn },
+    "test-ledger-worker"
+  );
+
+  const balances = await pool.query(
+    `
+    SELECT account_id, available_balance
+    FROM issuer_accounts
+    WHERE account_id = ANY($1)
+    ORDER BY account_id
+    `,
+    [[fromAccount, toAccount]]
+  );
+  const entries = await pool.query(
+    "SELECT entry_type FROM issuer_ledger_entries WHERE txn_id = $1 ORDER BY entry_type",
+    [txnId]
+  );
+
+  const fromBalance = balances.rows.find((row) => row.account_id === fromAccount);
+  const toBalance = balances.rows.find((row) => row.account_id === toAccount);
+
+  assert(result.status === "COMPLETED", "issuer ledger transaction should complete");
+  assert(Number(fromBalance.available_balance) === 375, "from account should be debited");
+  assert(Number(toBalance.available_balance) === 175, "to account should be credited");
+  assert(entries.rowCount === 2, "purchase should create debit and credit ledger entries");
+
+  await pool.query("DELETE FROM issuer_ledger_entries WHERE txn_id = $1", [txnId]);
+  await pool.query("DELETE FROM issuer_accounts WHERE account_id = ANY($1)", [[fromAccount, toAccount]]);
+  await pool.query("DELETE FROM outbox_events WHERE txn_id = $1", [txnId]);
+  await pool.query("DELETE FROM transactions WHERE txn_id = $1", [txnId]);
+
+  console.log("PASS internal issuer ledger debit and credit");
+}
+
+async function testExternalSettlementRecordCreated() {
+  const txnId = `rel-settle-${crypto.randomUUID()}`;
+  const now = new Date().toISOString();
+  const fullTxn = {
+    id: txnId,
+    idempotencyKey: `settlement-${txnId}`,
+    requestHash: crypto.createHash("sha256").update(txnId).digest("hex"),
+    amount: 225,
+    fromAccount: "A123",
+    toAccount: "B456",
+    type: "PURCHASE",
+    channel: "DOMESTIC_POS",
+    issuerType: "EXTERNAL",
+    network: "EXTERNAL_PROCESSOR",
+    status: "ACCEPTED",
+    retryCount: 0,
+    processingTimeline: [
+      {
+        status: "ACCEPTED",
+        timestamp: now,
+        message: "Transaction accepted by settlement test",
+      },
+    ],
+  };
+
+  await saveTransactionWithOutbox(fullTxn);
+
+  const result = await handleTransactionJob(
+    { id: `job-${txnId}`, data: fullTxn },
+    "test-settlement-worker"
+  );
+  const settlement = await pool.query(
+    `
+    SELECT network, authorization_status, settlement_status
+    FROM settlement_records
+    WHERE txn_id = $1
+    `,
+    [txnId]
+  );
+
+  assert(result.status === "COMPLETED", "external transaction should complete");
+  assert(settlement.rowCount === 1, "external transaction should create settlement record");
+  assert(
+    settlement.rows[0].network === "EXTERNAL_PROCESSOR",
+    "settlement record should retain external network"
+  );
+  assert(
+    settlement.rows[0].authorization_status === "SUCCESS",
+    "settlement record should store authorization outcome"
+  );
+  assert(
+    settlement.rows[0].settlement_status === "PENDING",
+    "settlement should start pending"
+  );
+
+  await pool.query("DELETE FROM settlement_records WHERE txn_id = $1", [txnId]);
+  await pool.query("DELETE FROM outbox_events WHERE txn_id = $1", [txnId]);
+  await pool.query("DELETE FROM transactions WHERE txn_id = $1", [txnId]);
+
+  console.log("PASS external settlement record created");
+}
+
 async function main() {
   const testName = process.argv[2] || "all";
 
@@ -360,6 +504,8 @@ async function main() {
     "duplicate-worker-job": testDuplicateBullMqJobIgnored,
     "stale-processing-transaction": testStaleProcessingTransactionRecovery,
     "outbox-max-recovery": testOutboxMaxRecoveryFailure,
+    "internal-issuer-ledger": testInternalIssuerLedgerDebitCredit,
+    "external-settlement-record": testExternalSettlementRecordCreated,
   };
 
   if (testName === "all") {

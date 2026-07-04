@@ -1,12 +1,12 @@
 const { validatePIN } = require("./systemA");
-const { validateBalance } = require("./systemB");
+const { applyInternalIssuerLedger } = require("../store/issuerLedgerStore");
 
-function handleInternal(txn) {
+async function handleInternal(txn) {
   console.log("🏦 Internal system processing");
 
-  // Balance inquiry skips PIN
+  // Balance inquiry reads directly from the issuer ledger and skips PIN.
   if (txn.type === "BALANCE_INQUIRY") {
-    return validateBalance(txn);
+    return applyInternalIssuerLedger(txn);
   }
 
   const pinResult = validatePIN(txn);
@@ -15,15 +15,15 @@ function handleInternal(txn) {
     return pinResult;
   }
 
-  const balanceResult = validateBalance(txn);
+  const ledgerResult = await applyInternalIssuerLedger(txn);
 
-  if (balanceResult.status === "DECLINED") {
-    return balanceResult;
+  if (ledgerResult.status === "DECLINED") {
+    return ledgerResult;
   }
 
   // Special transaction types
   if (txn.type === "REVERSAL") {
-    return balanceResult;
+    return ledgerResult;
   }
 
   if (txn.type === "CASH_WITHDRAWAL") {

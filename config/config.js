@@ -3,10 +3,6 @@ const config = {
   workerCount: Number(process.env.WORKER_COUNT) || 3,
   maxRetries: Number(process.env.MAX_RETRIES) || 3,
   transactionLimit: Number(process.env.TRANSACTION_LIMIT) || 10000,
-  balances: {
-    defaultBalance: Number(process.env.DEFAULT_BALANCE) || 5000,
-    inquiryBalance: Number(process.env.INQUIRY_BALANCE) || 2500,
-  },
 
   supportedIssuerTypes: ["INTERNAL", "EXTERNAL"],
 

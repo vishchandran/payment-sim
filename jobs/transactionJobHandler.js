@@ -9,6 +9,7 @@ const {
   finalizeTransactionProcessing,
   getTransaction,
   renewTransactionProcessingLease,
+  saveSettlementRecord,
   startTransactionProcessing,
 } = require("../store/store");
 
@@ -158,7 +159,7 @@ async function processClaimedTransaction(txn, workerId, processingTimeline) {
   let finalResult;
 
   if (route === "INTERNAL") {
-    finalResult = handleInternal(txn);
+    finalResult = await handleInternal(txn);
   } else if (route === "EXTERNAL_PROCESSOR" || route === "CARD_NETWORK") {
     finalResult = handleExternal(txn);
   } else {
@@ -186,6 +187,10 @@ async function processClaimedTransaction(txn, workerId, processingTimeline) {
     }
 
     return { skipped: false, status: "DECLINED" };
+  }
+
+  if (route === "EXTERNAL_PROCESSOR" || route === "CARD_NETWORK") {
+    await saveSettlementRecord(txn, finalResult.status);
   }
 
   const finalizedTxn = await finalizeTransactionProcessing(txn.id, workerId, {

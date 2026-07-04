@@ -174,6 +174,35 @@ async function getDeadLetterJobs() {
   return result.rows;
 }
 
+async function saveSettlementRecord(txn, authorizationStatus) {
+  const query = `
+    INSERT INTO settlement_records
+    (
+      txn_id,
+      network,
+      amount,
+      authorization_status,
+      settlement_status
+    )
+    VALUES ($1,$2,$3,$4,'PENDING')
+    ON CONFLICT (txn_id) DO UPDATE
+    SET
+      authorization_status = EXCLUDED.authorization_status,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING *;
+  `;
+
+  const values = [
+    txn.id,
+    txn.network,
+    txn.amount,
+    authorizationStatus,
+  ];
+
+  const result = await pool.query(query, values);
+  return result.rows[0];
+}
+
 async function updateTransaction(id, updates) {
   const query = `
     UPDATE transactions
@@ -360,5 +389,6 @@ module.exports = {
   recoverStaleProcessingTransactions,
   getTransaction,
   saveDeadLetterJob,
+  saveSettlementRecord,
   getDeadLetterJobs,
 };

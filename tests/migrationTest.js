@@ -30,6 +30,14 @@ async function main() {
   `);
   assert(columns.rowCount === 3, "expected upgraded transaction schema");
 
+  const tables = await pool.query(`
+    SELECT table_name
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name IN ('issuer_accounts', 'issuer_ledger_entries', 'settlement_records')
+  `);
+  assert(tables.rowCount === 3, "expected issuer ledger and settlement tables");
+
   console.log("PASS ordered migrations are complete and idempotent");
   await pool.end();
 }
