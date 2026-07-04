@@ -1,8 +1,0 @@
-ALTER TABLE outbox_events
-ADD COLUMN IF NOT EXISTS claim_count INTEGER NOT NULL DEFAULT 0,
-ADD COLUMN IF NOT EXISTS recovery_count INTEGER NOT NULL DEFAULT 0,
-ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMP,
-ADD COLUMN IF NOT EXISTS locked_by VARCHAR(100);
-
-CREATE INDEX IF NOT EXISTS idx_outbox_events_status_id
-ON outbox_events (status, id);
