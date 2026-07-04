@@ -19,10 +19,11 @@ API process (api.js)
   - idempotency handling
   |
   v
-PostgreSQL
+Platform DB + Outbox (PostgreSQL)
   - transactions
   - outbox_events
   - dead_letter_jobs
+  - settlement_records
   - schema_migrations
   |
   v
@@ -39,9 +40,36 @@ Redis / BullMQ
 Worker process (worker.js)
   - idempotent job handling
   - processing lease heartbeats
-  - transaction routing
   - retries
   - durable dead-letter records
+  |
+  v
+Switch / routing
+  |
+  +--> Internal issuer
+  |     |
+  |     +--> PIN Auth System (systemA.js)
+  |     |
+  |     +--> Issuer Ledger DB
+  |           - issuer_accounts
+  |           - issuer_ledger_entries
+  |           - balance inquiry reads
+  |           - purchase / withdrawal debits
+  |           - purchase credits
+  |           - reversal credits
+  |           |
+  |           +--> COMPLETED
+  |           +--> DECLINED
+  |
+  +--> External authorization (systems/external.js)
+        - external issuer ledger is outside this simulator
+        |
+        +--> COMPLETED
+        +--> DECLINED
+
+Nightly settlement / clearing
+  - settlement_records
+  - platform-side reconciliation tracking for external outcomes
 ```
 
 ## Key Features
@@ -204,4 +232,4 @@ npm run test-reliability
 - Metrics and health checks exist, but there is no distributed tracing, dashboard, alert routing, or defined SLO.
 - Secrets are injected through environment variables; integration with a managed secret store and automated rotation is not included.
 - `from_account` and `to_account` are still stored as plaintext simulator identifiers.
-- The simulated downstream systems do not provide real issuer idempotency, reconciliation, reversals, or settlement.
+- External downstream systems are simulated; payment-sim records platform-side settlement records, but it does not model a real external issuer ledger or clearing network.
