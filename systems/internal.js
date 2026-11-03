@@ -1,5 +1,7 @@
 const { validatePIN } = require("./systemA");
-const { applyInternalIssuerLedger } = require("../store/issuerLedgerStore");
+const {
+  applyInternalIssuerLedger,
+} = require("../infrastructure/persistence/issuerLedgerRepository");
 
 async function handleInternal(txn) {
   console.log("🏦 Internal system processing");

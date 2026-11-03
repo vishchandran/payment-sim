@@ -1,16 +1,8 @@
-function validatePIN(txn) {
+const { authorizePin } = require("../domain/paymentAuthorization");
+
+function validatePIN(transaction) {
   console.log("🔐 System A - Validating PIN");
-
-  if (txn.pinVerified !== true) {
-    return {
-      status: "DECLINED",
-      reason: "Invalid PIN"
-    };
-  }
-
-  return {
-    status: "APPROVED"
-  };
+  return authorizePin(transaction);
 }
 
 module.exports = { validatePIN };

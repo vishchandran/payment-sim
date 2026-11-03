@@ -1,4 +1,9 @@
 const pool = require("../db/connection");
+const {
+  LedgerOperation,
+  createIssuerLedgerResult,
+  planIssuerLedgerTransaction,
+} = require("../domain/issuerLedgerPolicy");
 
 async function getIssuerAccount(accountId) {
   const result = await pool.query(
@@ -40,81 +45,63 @@ async function applyInternalIssuerLedger(txn) {
       return existingLedger;
     }
 
-    const fromAccount = await lockAccount(client, txn.fromAccount);
+    const fromAccountRow = await lockAccount(client, txn.fromAccount);
+    const fromAccount = fromAccountRow
+      ? {
+          availableBalance: Number(fromAccountRow.available_balance),
+          currency: fromAccountRow.currency,
+          status: fromAccountRow.status,
+        }
+      : null;
+    const plan = planIssuerLedgerTransaction(txn, fromAccount);
 
-    if (!fromAccount) {
+    if (!plan.approved) {
       await client.query("ROLLBACK");
-      return { status: "DECLINED", reason: "Issuer account not found" };
+      return plan.result;
     }
 
-    if (fromAccount.status !== "ACTIVE") {
-      await client.query("ROLLBACK");
-      return { status: "DECLINED", reason: "Issuer account is not active" };
-    }
-
-    if (txn.type === "BALANCE_INQUIRY") {
+    if (plan.operation === LedgerOperation.BALANCE_INQUIRY) {
       await client.query("COMMIT");
-      return {
-        status: "SUCCESS",
-        system: "ISSUER_LEDGER",
-        balance: Number(fromAccount.available_balance),
-        currency: fromAccount.currency,
-      };
+      return createIssuerLedgerResult(
+        txn.type,
+        fromAccount.availableBalance,
+        fromAccount.currency
+      );
     }
 
-    if (txn.type === "REVERSAL") {
-      const amount = Number(txn.amount);
+    if (plan.operation === LedgerOperation.REVERSAL_CREDIT) {
       const credited = await creditAccount(client, {
         txnId: txn.id,
-        accountId: txn.fromAccount,
-        amount,
-        entryType: "REVERSAL_CREDIT",
-        description: "Issuer ledger reversal credit",
+        ...plan.sourceEntry,
       });
 
       await client.query("COMMIT");
-      return {
-        status: "SUCCESS",
-        system: "ISSUER_LEDGER",
-        details: "Previous transaction reversed",
-        balance: credited.balanceAfter,
-        currency: credited.currency,
-      };
-    }
-
-    const amount = Number(txn.amount);
-
-    if (Number(fromAccount.available_balance) < amount) {
-      await client.query("ROLLBACK");
-      return { status: "DECLINED", reason: "Insufficient funds" };
+      return createIssuerLedgerResult(
+        txn.type,
+        credited.balanceAfter,
+        credited.currency
+      );
     }
 
     const debited = await debitAccount(client, {
       txnId: txn.id,
-      accountId: txn.fromAccount,
-      amount,
-      entryType: ledgerDebitType(txn.type),
-      description: `Issuer ledger ${txn.type.toLowerCase()} debit`,
+      ...plan.sourceEntry,
     });
 
-    if (txn.type === "PURCHASE" && txn.toAccount) {
-      await ensureAccount(client, txn.toAccount);
+    if (plan.destinationEntry) {
+      await ensureAccount(client, plan.destinationEntry.accountId);
       await creditAccount(client, {
         txnId: txn.id,
-        accountId: txn.toAccount,
-        amount,
-        entryType: "PURCHASE_CREDIT",
-        description: "Issuer ledger purchase credit",
+        ...plan.destinationEntry,
       });
     }
 
     await client.query("COMMIT");
-    return {
-      status: "APPROVED",
-      system: "ISSUER_LEDGER",
-      balance: debited.balanceAfter,
-      currency: debited.currency,
-    };
+    return createIssuerLedgerResult(
+      txn.type,
+      debited.balanceAfter,
+      debited.currency
+    );
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -218,14 +205,6 @@ async function insertLedgerEntry(client, entry) {
   };
 }
 
-function ledgerDebitType(transactionType) {
-  if (transactionType === "CASH_WITHDRAWAL") {
-    return "CASH_WITHDRAWAL_DEBIT";
-  }
-
-  return "PURCHASE_DEBIT";
-}
-
 async function getExistingLedgerResult(client, txn) {
   const result = await client.query(
     `
@@ -244,31 +223,11 @@ async function getExistingLedgerResult(client, txn) {
   const fromEntry =
     result.rows.find((row) => row.account_id === txn.fromAccount) || result.rows[0];
 
-  if (txn.type === "BALANCE_INQUIRY") {
-    return {
-      status: "SUCCESS",
-      system: "ISSUER_LEDGER",
-      balance: Number(fromEntry.balance_after),
-      currency: fromEntry.currency,
-    };
-  }
-
-  if (txn.type === "REVERSAL") {
-    return {
-      status: "SUCCESS",
-      system: "ISSUER_LEDGER",
-      details: "Previous transaction reversed",
-      balance: Number(fromEntry.balance_after),
-      currency: fromEntry.currency,
-    };
-  }
-
-  return {
-    status: "APPROVED",
-    system: "ISSUER_LEDGER",
-    balance: Number(fromEntry.balance_after),
-    currency: fromEntry.currency,
-  };
+  return createIssuerLedgerResult(
+    txn.type,
+    fromEntry.balance_after,
+    fromEntry.currency
+  );
 }
 
 module.exports = {

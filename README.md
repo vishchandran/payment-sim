@@ -8,6 +8,21 @@ It is intentionally small enough to read end to end, while still demonstrating r
 
 Interactive architecture flow: [payment-sim visualizer](https://payment-sim-visualizer-lab.vercel.app/)
 
+The code is organized into explicit layers:
+
+```text
+domain/          Pure payment rules, vocabulary, and state transitions
+application/     Payment acceptance and transaction processing use cases
+infrastructure/  HTTP, PostgreSQL, BullMQ, logging, and metrics adapters
+api.js           HTTP process entrypoint
+worker.js        Worker process entrypoint
+outbox.js        Outbox and recovery process entrypoint
+```
+
+Dependencies point inward from infrastructure to application to domain. See
+[`docs/architecture.md`](docs/architecture.md) for the boundary rules, persistence
+transaction ownership, compatibility paths, and testing strategy.
+
 ```text
 Client / Merchant
   |

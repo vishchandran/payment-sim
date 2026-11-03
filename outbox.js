@@ -3,7 +3,9 @@ const { validateRuntimeConfiguration } = require("./config/config");
 validateRuntimeConfiguration();
 
 const pool = require("./db/connection");
-const { transactionQueue } = require("./jobs/transactionQueue");
+const {
+  transactionQueue,
+} = require("./infrastructure/queue/transactionQueue");
 const { startOutboxProcessor } = require("./outbox/outboxProcessor");
 const { startTransactionRecoveryScheduler } = require("./recovery/transactionRecovery");
 

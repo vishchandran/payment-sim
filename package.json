@@ -20,7 +20,11 @@
     "test-observability": "node tests/observabilityTest.js",
     "test-rate-limit": "node tests/rateLimiterTest.js",
     "test-request-hash": "node tests/requestHashTest.js",
-    "test:core": "npm run test-auth && npm run test-cors && npm run test-status-auth && npm run test-rate-limit && npm run test-request-hash && npm run test-migrations && npm run test-transaction-recovery && npm run test-sensitive-data && npm run test-observability",
+    "test-domain": "node tests/domainBehaviorTest.js",
+    "test-accept-payment": "node tests/acceptPaymentTest.js",
+    "test-process-transaction": "node tests/processTransactionTest.js",
+    "test-ledger-policy": "node tests/issuerLedgerPolicyTest.js",
+    "test:core": "npm run test-domain && npm run test-accept-payment && npm run test-process-transaction && npm run test-ledger-policy && npm run test-auth && npm run test-cors && npm run test-status-auth && npm run test-rate-limit && npm run test-request-hash && npm run test-migrations && npm run test-transaction-recovery && npm run test-sensitive-data && npm run test-observability",
     "test": "npm run test:core"
   },
   "keywords": [],
