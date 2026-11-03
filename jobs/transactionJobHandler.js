@@ -5,6 +5,11 @@ const { processTransaction } = require("../processor/processor");
 const { handleInternal } = require("../systems/internal");
 const { handleExternal } = require("../systems/external");
 const { sanitizePayload } = require("../utils/sensitiveData");
+const { TransactionStatus } = require("../domain/transactionConstants");
+const {
+  FINAL_TRANSACTION_STATUSES,
+  isFinalTransactionStatus,
+} = require("../domain/transactionState");
 const {
   finalizeTransactionProcessing,
   getTransaction,
@@ -13,7 +18,7 @@ const {
   startTransactionProcessing,
 } = require("../store/store");
 
-const FINAL_STATUSES = new Set(["COMPLETED", "DECLINED", "FAILED"]);
+const FINAL_STATUSES = new Set(FINAL_TRANSACTION_STATUSES);
 const PROCESSING_LEASE_MS =
   Number(process.env.TRANSACTION_PROCESSING_LEASE_MS) || 120000;
 const PROCESSING_HEARTBEAT_INTERVAL_MS =
@@ -40,7 +45,7 @@ async function handleTransactionJob(job, processorInstanceId) {
     throw new Error(`Transaction not found: ${txn.id}`);
   }
 
-  if (FINAL_STATUSES.has(existingTxn.status)) {
+  if (isFinalTransactionStatus(existingTxn.status)) {
     logEvent("worker", "DUPLICATE_JOB_IGNORED", txn.id, {
       workerId,
       jobId: job.id,
@@ -49,7 +54,7 @@ async function handleTransactionJob(job, processorInstanceId) {
     return { skipped: true, reason: "Transaction already finalized" };
   }
 
-  if (existingTxn.status !== "ACCEPTED") {
+  if (existingTxn.status !== TransactionStatus.ACCEPTED) {
     logEvent("worker", "DUPLICATE_JOB_IGNORED", txn.id, {
       workerId,
       jobId: job.id,
@@ -61,7 +66,7 @@ async function handleTransactionJob(job, processorInstanceId) {
   const processingTimeline = [
     ...(existingTxn.processing_timeline || txn.processingTimeline || []),
     {
-      status: "PROCESSING",
+      status: TransactionStatus.PROCESSING,
       timestamp: new Date().toISOString(),
       message: "BullMQ worker started processing",
     },
@@ -131,18 +136,18 @@ async function handleTransactionJob(job, processorInstanceId) {
 async function processClaimedTransaction(txn, workerId, processingTimeline) {
   const result = processTransaction(txn);
 
-  if (result.status === "FAILED") {
+  if (result.status === TransactionStatus.FAILED) {
     throw new Error(result.reason || "Transaction processor failed");
   }
 
-  if (result.status === "DECLINED") {
+  if (result.status === TransactionStatus.DECLINED) {
     const finalizedTxn = await finalizeTransactionProcessing(txn.id, workerId, {
-      status: "DECLINED",
+      status: TransactionStatus.DECLINED,
       reason: result.reason,
       workerId: 1,
       processingTimeline: appendTimeline(
         processingTimeline,
-        "DECLINED",
+        TransactionStatus.DECLINED,
         `Transaction declined by processor: ${result.reason}`
       ),
     });
@@ -151,7 +156,7 @@ async function processClaimedTransaction(txn, workerId, processingTimeline) {
       return { skipped: true, reason: "Transaction finalization lost" };
     }
 
-    return { skipped: false, status: "DECLINED" };
+    return { skipped: false, status: TransactionStatus.DECLINED };
   }
 
   const route = routeTransaction(txn);
@@ -164,20 +169,20 @@ async function processClaimedTransaction(txn, workerId, processingTimeline) {
     finalResult = handleExternal(txn);
   } else {
     finalResult = {
-      status: "DECLINED",
+      status: TransactionStatus.DECLINED,
       reason: "Unsupported route",
     };
   }
 
-  if (finalResult.status === "DECLINED") {
+  if (finalResult.status === TransactionStatus.DECLINED) {
     const finalizedTxn = await finalizeTransactionProcessing(txn.id, workerId, {
-      status: "DECLINED",
+      status: TransactionStatus.DECLINED,
       route,
       reason: finalResult.reason,
       workerId: 1,
       processingTimeline: appendTimeline(
         processingTimeline,
-        "DECLINED",
+        TransactionStatus.DECLINED,
         `Transaction declined by routed system: ${finalResult.reason}`
       ),
     });
@@ -186,7 +191,7 @@ async function processClaimedTransaction(txn, workerId, processingTimeline) {
       return { skipped: true, reason: "Transaction finalization lost" };
     }
 
-    return { skipped: false, status: "DECLINED" };
+    return { skipped: false, status: TransactionStatus.DECLINED };
   }
 
   if (route === "EXTERNAL_PROCESSOR" || route === "CARD_NETWORK") {
@@ -194,17 +199,17 @@ async function processClaimedTransaction(txn, workerId, processingTimeline) {
   }
 
   const finalizedTxn = await finalizeTransactionProcessing(txn.id, workerId, {
-    status: "COMPLETED",
+    status: TransactionStatus.COMPLETED,
     route,
     result: finalResult,
     workerId: 1,
     processingTimeline: appendTimeline(
       appendTimeline(
         processingTimeline,
-        "PROCESSING",
+        TransactionStatus.PROCESSING,
         "BullMQ worker processed transaction"
       ),
-      "COMPLETED",
+      TransactionStatus.COMPLETED,
       "Transaction processed successfully"
     ),
   });
@@ -213,7 +218,7 @@ async function processClaimedTransaction(txn, workerId, processingTimeline) {
     return { skipped: true, reason: "Transaction finalization lost" };
   }
 
-  return { skipped: false, status: "COMPLETED" };
+  return { skipped: false, status: TransactionStatus.COMPLETED };
 }
 
 module.exports = {

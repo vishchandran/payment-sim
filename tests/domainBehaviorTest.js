@@ -29,6 +29,10 @@ const {
   requiresPin,
   verifyPin,
 } = require("../domain/paymentAuthorization");
+const {
+  canTransitionTransaction,
+  isFinalTransactionStatus,
+} = require("../domain/transactionState");
 const { routeTransaction } = require("../broker/router");
 const { processTransaction } = require("../processor/processor");
 const { evaluateRisk } = require("../risk/riskEngine");
@@ -60,6 +64,32 @@ function testDomainVocabulary() {
   assert.equal(config.supportedChannels, SUPPORTED_TRANSACTION_CHANNELS);
   assert.equal(config.supportedIssuerTypes, SUPPORTED_ISSUER_TYPES);
   assert.equal(config.supportedNetworks, SUPPORTED_PAYMENT_NETWORKS);
+}
+
+function testTransactionStateRules() {
+  assert.equal(
+    canTransitionTransaction(
+      TransactionStatus.ACCEPTED,
+      TransactionStatus.PROCESSING
+    ),
+    true
+  );
+  assert.equal(
+    canTransitionTransaction(
+      TransactionStatus.PROCESSING,
+      TransactionStatus.COMPLETED
+    ),
+    true
+  );
+  assert.equal(
+    canTransitionTransaction(
+      TransactionStatus.COMPLETED,
+      TransactionStatus.PROCESSING
+    ),
+    false
+  );
+  assert.equal(isFinalTransactionStatus(TransactionStatus.DECLINED), true);
+  assert.equal(isFinalTransactionStatus(TransactionStatus.PROCESSING), false);
 }
 
 function testValidationRules() {
@@ -237,6 +267,7 @@ function testAuthorizationAndProcessorRules() {
 
 function main() {
   testDomainVocabulary();
+  testTransactionStateRules();
   testValidationRules();
   testRiskRulesAndBoundaries();
   testRoutingRules();
