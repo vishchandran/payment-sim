@@ -19,6 +19,10 @@ const {
   RiskDecision,
   evaluateRisk: evaluateDomainRisk,
 } = require("../domain/riskAssessment");
+const {
+  TransactionRoute,
+  routeTransaction: routeDomainTransaction,
+} = require("../domain/transactionRouting");
 const { routeTransaction } = require("../broker/router");
 const { processTransaction } = require("../processor/processor");
 const { evaluateRisk } = require("../risk/riskEngine");
@@ -163,6 +167,8 @@ function testRiskRulesAndBoundaries() {
 }
 
 function testRoutingRules() {
+  assert.equal(TransactionRoute.INTERNAL, "INTERNAL");
+  assert.equal(routeDomainTransaction(payment()), TransactionRoute.INTERNAL);
   assert.equal(routeTransaction(payment()), "INTERNAL");
   assert.equal(
     routeTransaction(payment({ issuerType: "EXTERNAL", network: "EXTERNAL_PROCESSOR" })),

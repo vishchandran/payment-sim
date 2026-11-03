@@ -1,24 +1,8 @@
-function routeTransaction(txn) {
+const { routeTransaction: routeDomainTransaction } = require("../domain/transactionRouting");
+
+function routeTransaction(transaction) {
   console.log("BROKER_RECEIVED_TXN");
-
-  if (txn.issuerType === "INTERNAL") {
-    return "INTERNAL";
-  }
-
- if (txn.network === "EXTERNAL_PROCESSOR") {
-  return "EXTERNAL_PROCESSOR";
-}
-
-if (txn.network === "CARD_NETWORK") {
-  return "CARD_NETWORK";
-}
-  
-
-  if (txn.issuerType === "EXTERNAL") {
-    return "EXTERNAL";
-  }
-
-  return "UNKNOWN";
+  return routeDomainTransaction(transaction);
 }
 
 module.exports = { routeTransaction };
