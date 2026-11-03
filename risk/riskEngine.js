@@ -1,29 +1,10 @@
 const { config } = require("../config/config");
-function evaluateRisk(txn) {
-  if (txn.channel === "INTERNATIONAL_ATM" && txn.amount > config.riskRules.internationalAtmLimit) {
-    return {
-      decision: "REJECT",
-      reason: "High-risk international ATM withdrawal"
-    };
-  }
+const {
+  evaluateRisk: evaluateDomainRisk,
+} = require("../domain/riskAssessment");
 
-  if (txn.channel === "ECOM" && txn.amount > config.riskRules.ecommerceReviewLimit) {
-    return {
-      decision: "REVIEW",
-      reason: "High-value e-commerce transaction"
-    };
-  }
-
-  if (txn.channel === "INTERNATIONAL_POS" && txn.amount > config.riskRules.internationalPosReviewLimit) {
-    return {
-      decision: "REVIEW",
-      reason: "High-value international POS transaction"
-    };
-  }
-
-  return {
-    decision: "APPROVE"
-  };
+function evaluateRisk(transaction) {
+  return evaluateDomainRisk(transaction, config.riskRules);
 }
 
 module.exports = { evaluateRisk };

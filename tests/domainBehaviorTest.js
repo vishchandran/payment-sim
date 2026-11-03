@@ -15,6 +15,10 @@ const {
 const {
   validateTransaction: validateDomainTransaction,
 } = require("../domain/transactionValidation");
+const {
+  RiskDecision,
+  evaluateRisk: evaluateDomainRisk,
+} = require("../domain/riskAssessment");
 const { routeTransaction } = require("../broker/router");
 const { processTransaction } = require("../processor/processor");
 const { evaluateRisk } = require("../risk/riskEngine");
@@ -106,6 +110,8 @@ function testValidationRules() {
 }
 
 function testRiskRulesAndBoundaries() {
+  assert.equal(RiskDecision.APPROVE, "APPROVE");
+
   assert.deepEqual(
     evaluateRisk(
       payment({
@@ -144,6 +150,15 @@ function testRiskRulesAndBoundaries() {
       decision: "REVIEW",
       reason: "High-value international POS transaction",
     }
+  );
+
+  assert.deepEqual(
+    evaluateDomainRisk(payment({ channel: "ECOM", amount: 11 }), {
+      internationalAtmLimit: 10,
+      ecommerceReviewLimit: 10,
+      internationalPosReviewLimit: 10,
+    }),
+    { decision: "REVIEW", reason: "High-value e-commerce transaction" }
   );
 }
 
