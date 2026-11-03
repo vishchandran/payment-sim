@@ -12,6 +12,9 @@ const {
   SUPPORTED_TRANSACTION_CHANNELS,
   SUPPORTED_TRANSACTION_TYPES,
 } = require("../domain/transactionConstants");
+const {
+  validateTransaction: validateDomainTransaction,
+} = require("../domain/transactionValidation");
 const { routeTransaction } = require("../broker/router");
 const { processTransaction } = require("../processor/processor");
 const { evaluateRisk } = require("../risk/riskEngine");
@@ -94,6 +97,11 @@ function testValidationRules() {
       valid: false,
       reason: "Network must be EXTERNAL_PROCESSOR or CARD_NETWORK",
     }
+  );
+
+  assert.deepEqual(
+    validateDomainTransaction(payment({ amount: 11 }), { transactionLimit: 10 }),
+    { valid: false, reason: "Amount exceeds transaction limit" }
   );
 }
 
