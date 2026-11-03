@@ -16,7 +16,7 @@ const pool = require("./db/connection");
 const app = express();
 
 const { evaluateRisk } = require("./risk/riskEngine");
-const { verifyPin } = require("./domain/paymentAuthorization");
+const { createAcceptPayment } = require("./application/acceptPayment");
 const { maskSensitiveData } = require("./utils/mask");
 const {
   sanitizeTransactionForPersistence,
@@ -31,6 +31,19 @@ const {
   getTransaction,
   getDeadLetterJobs,
 } = require("./store/store");
+
+const acceptPayment = createAcceptPayment({
+  createRequestHash,
+  createTransactionId: () => crypto.randomUUID(),
+  evaluateRisk,
+  expectedPin: "TEST_PIN",
+  logEvent,
+  maskSensitiveData,
+  now: () => new Date().toISOString(),
+  sanitizeTransactionForPersistence,
+  saveTransactionWithOutbox,
+  validateTransaction,
+});
 
 console.log("APP STARTING...");
 
@@ -128,99 +141,12 @@ app.get("/dead-letter", adminApiKeyAuth, (req, res) => {
 
 app.post("/pay", apiKeyAuth, async (req, res) => {
   try {
-    const txn = req.body;
-    const idempotencyKey = req.header("x-idempotency-key");
-
-    if (!idempotencyKey) {
-      return res.status(400).json({
-        status: "DECLINED",
-        reason: "Missing x-idempotency-key header",
-      });
-    }
-
-    const requestHash = createRequestHash(txn);
-
-    logEvent("api", "RAW_TRANSACTION_RECEIVED", "N/A", maskSensitiveData(txn));
-
-    const validation = validateTransaction(txn);
-
-    if (!validation.valid) {
-      return res.status(400).json({
-        status: "DECLINED",
-        reason: validation.reason,
-      });
-    }
-
-    const validatedTxn = validation.transaction;
-    const risk = evaluateRisk(validatedTxn);
-
-    if (risk.decision === "REJECT") {
-      return res.status(403).json({
-        status: "REJECTED",
-        reason: risk.reason,
-      });
-    }
-
-    if (risk.decision === "REVIEW") {
-      return res.status(202).json({
-        status: "MANUAL_REVIEW",
-        reason: risk.reason,
-      });
-    }
-
-    const txnId = crypto.randomUUID();
-    const now = new Date().toISOString();
-    const pinVerified = verifyPin(validatedTxn, "TEST_PIN");
-
-    const fullTxn = sanitizeTransactionForPersistence({
-      id: txnId,
+    const result = await acceptPayment({
       clientId: req.auth.clientId,
-      idempotencyKey,
-      requestHash,
-      ...validatedTxn,
-      pinVerified,
-      status: "ACCEPTED",
-      retryCount: 0,
-      createdAt: now,
-      updatedAt: now,
-      processingTimeline: [
-        {
-          status: "ACCEPTED",
-          timestamp: now,
-          message: "Transaction accepted by API",
-        },
-      ],
+      idempotencyKey: req.header("x-idempotency-key"),
+      transaction: req.body,
     });
-
-    logEvent(
-      "api",
-      "TRANSACTION_RECEIVED",
-      fullTxn.id,
-      maskSensitiveData(fullTxn)
-    );
-
-    const saveResult = await saveTransactionWithOutbox(fullTxn);
-
-    if (!saveResult.inserted) {
-      if (saveResult.conflict) {
-        return res.status(409).json({
-          status: "REJECTED",
-          reason: "Idempotency key already used with different request payload",
-        });
-      }
-
-      return res.status(200).json({
-        status: saveResult.transaction.status,
-        transactionId: saveResult.transaction.txn_id,
-        message: "Duplicate request detected. Returning original transaction.",
-      });
-    }
-
-    return res.status(202).json({
-      status: "ACCEPTED",
-      transactionId: txnId,
-      message: "Transaction accepted for processing",
-    });
+    return res.status(result.statusCode).json(result.body);
   } catch (error) {
     console.error("PAYMENT_ACCEPTANCE_ERROR:", error);
 
