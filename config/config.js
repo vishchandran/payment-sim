@@ -1,33 +1,30 @@
+const {
+  SUPPORTED_ISSUER_TYPES,
+  SUPPORTED_PAYMENT_NETWORKS,
+  SUPPORTED_TRANSACTION_CHANNELS,
+  SUPPORTED_TRANSACTION_TYPES,
+} = require("../domain/transactionConstants");
+const {
+  DEFAULT_RISK_RULES,
+  DEFAULT_TRANSACTION_LIMIT,
+} = require("../domain/paymentPolicy");
+
 const config = {
   port: Number(process.env.PORT) || 3000,
   workerCount: Number(process.env.WORKER_COUNT) || 3,
   maxRetries: Number(process.env.MAX_RETRIES) || 3,
-  transactionLimit: Number(process.env.TRANSACTION_LIMIT) || 10000,
+  transactionLimit:
+    Number(process.env.TRANSACTION_LIMIT) || DEFAULT_TRANSACTION_LIMIT,
 
-  supportedIssuerTypes: ["INTERNAL", "EXTERNAL"],
+  supportedIssuerTypes: SUPPORTED_ISSUER_TYPES,
 
-  supportedNetworks: ["EXTERNAL_PROCESSOR", "CARD_NETWORK"],
+  supportedNetworks: SUPPORTED_PAYMENT_NETWORKS,
 
-  supportedTransactionTypes: [
-    "PURCHASE",
-    "CASH_WITHDRAWAL",
-    "BALANCE_INQUIRY",
-    "REVERSAL"
-  ],
+  supportedTransactionTypes: SUPPORTED_TRANSACTION_TYPES,
 
-  supportedChannels: [
-    "DOMESTIC_ATM",
-    "INTERNATIONAL_ATM",
-    "DOMESTIC_POS",
-    "INTERNATIONAL_POS",
-    "ECOM"
-  ],
+  supportedChannels: SUPPORTED_TRANSACTION_CHANNELS,
 
-  riskRules: {
-    internationalAtmLimit: 1000,
-    ecommerceReviewLimit: 5000,
-    internationalPosReviewLimit: 3000,
-  },
+  riskRules: DEFAULT_RISK_RULES,
 }
 
 function validateRuntimeConfiguration(env = process.env) {

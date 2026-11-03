@@ -1,6 +1,17 @@
 const assert = require("node:assert/strict");
 
 const { config } = require("../config/config");
+const {
+  IssuerType,
+  PaymentNetwork,
+  TransactionChannel,
+  TransactionStatus,
+  TransactionType,
+  SUPPORTED_ISSUER_TYPES,
+  SUPPORTED_PAYMENT_NETWORKS,
+  SUPPORTED_TRANSACTION_CHANNELS,
+  SUPPORTED_TRANSACTION_TYPES,
+} = require("../domain/transactionConstants");
 const { routeTransaction } = require("../broker/router");
 const { processTransaction } = require("../processor/processor");
 const { evaluateRisk } = require("../risk/riskEngine");
@@ -18,6 +29,20 @@ function payment(overrides = {}) {
     issuerType: "INTERNAL",
     ...overrides,
   };
+}
+
+function testDomainVocabulary() {
+  assert.equal(TransactionType.PURCHASE, "PURCHASE");
+  assert.equal(TransactionType.BALANCE_INQUIRY, "BALANCE_INQUIRY");
+  assert.equal(TransactionChannel.INTERNATIONAL_ATM, "INTERNATIONAL_ATM");
+  assert.equal(IssuerType.INTERNAL, "INTERNAL");
+  assert.equal(PaymentNetwork.CARD_NETWORK, "CARD_NETWORK");
+  assert.equal(TransactionStatus.PROCESSING, "PROCESSING");
+
+  assert.equal(config.supportedTransactionTypes, SUPPORTED_TRANSACTION_TYPES);
+  assert.equal(config.supportedChannels, SUPPORTED_TRANSACTION_CHANNELS);
+  assert.equal(config.supportedIssuerTypes, SUPPORTED_ISSUER_TYPES);
+  assert.equal(config.supportedNetworks, SUPPORTED_PAYMENT_NETWORKS);
 }
 
 function testValidationRules() {
@@ -160,6 +185,7 @@ function testAuthorizationAndProcessorRules() {
 }
 
 function main() {
+  testDomainVocabulary();
   testValidationRules();
   testRiskRulesAndBoundaries();
   testRoutingRules();
