@@ -1,11 +1,11 @@
 const { app } = require("./app");
 const { config, validateRuntimeConfiguration } = require("./config/config");
 const pool = require("./db/connection");
-const { closeRateLimiter } = require("./middleware/rateLimiter");
+const { closeRateLimiter } = require("./infrastructure/http/rateLimiter");
 const {
   validateAdminApiKeyConfiguration,
   validateApiKeyConfiguration,
-} = require("./middleware/apiKeyAuth");
+} = require("./infrastructure/http/apiKeyAuth");
 
 validateApiKeyConfiguration();
 validateAdminApiKeyConfiguration();

@@ -1,6 +1,8 @@
 const crypto = require("crypto");
 const pool = require("../db/connection");
-const { transactionQueue } = require("../jobs/transactionQueue");
+const {
+  transactionQueue,
+} = require("../infrastructure/queue/transactionQueue");
 const { sanitizeText } = require("../utils/sensitiveData");
 
 const DEFAULT_STALE_TIMEOUT_MS = Number(process.env.OUTBOX_STALE_TIMEOUT_MS) || 60000;

@@ -1,5 +1,5 @@
 const crypto = require("crypto");
-const { logEvent } = require("../logger/logger");
+const { logEvent } = require("../infrastructure/observability/logger");
 const { routeTransaction } = require("../broker/router");
 const { processTransaction } = require("../processor/processor");
 const { handleInternal } = require("../systems/internal");
@@ -17,7 +17,7 @@ const {
   renewTransactionProcessingLease,
   saveSettlementRecord,
   startTransactionProcessing,
-} = require("../store/store");
+} = require("../infrastructure/persistence/transactionRepository");
 
 const FINAL_STATUSES = new Set(FINAL_TRANSACTION_STATUSES);
 const PROCESSING_LEASE_MS =

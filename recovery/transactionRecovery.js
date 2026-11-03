@@ -1,4 +1,6 @@
-const { recoverStaleProcessingTransactions } = require("../store/store");
+const {
+  recoverStaleProcessingTransactions,
+} = require("../infrastructure/persistence/transactionRepository");
 
 const DEFAULT_RECOVERY_INTERVAL_MS =
   Number(process.env.TRANSACTION_RECOVERY_INTERVAL_MS) || 30000;

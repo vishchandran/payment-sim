@@ -6,11 +6,19 @@ const {
   adminApiKeyAuth,
   apiKeyAuth,
   apiKeyOrAdminAuth,
-} = require("./middleware/apiKeyAuth");
-const { buildCorsOptions } = require("./middleware/corsConfig");
-const { canAccessTransactionStatus } = require("./middleware/statusAuthorization");
-const { apiRateLimiter, pingRateLimiter } = require("./middleware/rateLimiter");
-const { recordHttpMetrics, renderMetrics } = require("./observability/metrics");
+} = require("./infrastructure/http/apiKeyAuth");
+const { buildCorsOptions } = require("./infrastructure/http/corsConfig");
+const {
+  canAccessTransactionStatus,
+} = require("./infrastructure/http/statusAuthorization");
+const {
+  apiRateLimiter,
+  pingRateLimiter,
+} = require("./infrastructure/http/rateLimiter");
+const {
+  recordHttpMetrics,
+  renderMetrics,
+} = require("./infrastructure/observability/metrics");
 const pool = require("./db/connection");
 
 const app = express();
@@ -22,7 +30,7 @@ const {
   sanitizeTransactionForPersistence,
   serializeTransactionResponse,
 } = require("./utils/sensitiveData");
-const { logEvent } = require("./logger/logger");
+const { logEvent } = require("./infrastructure/observability/logger");
 const { createRequestHash } = require("./utils/requestHash");
 const { validateTransaction } = require("./validation/validator");
 
@@ -30,7 +38,7 @@ const {
   saveTransactionWithOutbox,
   getTransaction,
   getDeadLetterJobs,
-} = require("./store/store");
+} = require("./infrastructure/persistence/transactionRepository");
 
 const acceptPayment = createAcceptPayment({
   createRequestHash,

@@ -4,7 +4,9 @@ validateRuntimeConfiguration();
 
 const pool = require("./db/connection");
 const worker = require("./jobs/transactionWorker");
-const { transactionQueue } = require("./jobs/transactionQueue");
+const {
+  transactionQueue,
+} = require("./infrastructure/queue/transactionQueue");
 
 console.log("Transaction worker started");
 

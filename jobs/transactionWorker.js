@@ -3,7 +3,10 @@ const crypto = require("crypto");
 const os = require("os");
 const { connection } = require("./transactionQueue");
 
-const { saveDeadLetterJob, updateTransaction } = require("../store/store");
+const {
+  saveDeadLetterJob,
+  updateTransaction,
+} = require("../infrastructure/persistence/transactionRepository");
 const { handleTransactionJob } = require("./transactionJobHandler");
 const { sanitizeText } = require("../utils/sensitiveData");
 
