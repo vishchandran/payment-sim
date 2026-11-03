@@ -4,6 +4,7 @@ const { routeTransaction } = require("../broker/router");
 const { processTransaction } = require("../processor/processor");
 const { handleInternal } = require("../systems/internal");
 const { handleExternal } = require("../systems/external");
+const { createProcessTransaction } = require("../application/processTransaction");
 const { sanitizePayload } = require("../utils/sensitiveData");
 const { TransactionStatus } = require("../domain/transactionConstants");
 const {
@@ -24,16 +25,15 @@ const PROCESSING_LEASE_MS =
 const PROCESSING_HEARTBEAT_INTERVAL_MS =
   Number(process.env.TRANSACTION_HEARTBEAT_INTERVAL_MS) || 30000;
 
-function appendTimeline(processingTimeline, status, message) {
-  return [
-    ...processingTimeline,
-    {
-      status,
-      timestamp: new Date().toISOString(),
-      message,
-    },
-  ];
-}
+const processClaimedTransaction = createProcessTransaction({
+  finalizeTransactionProcessing,
+  handleExternal,
+  handleInternal,
+  now: () => new Date().toISOString(),
+  processTransaction,
+  routeTransaction,
+  saveSettlementRecord,
+});
 
 async function handleTransactionJob(job, processorInstanceId) {
   const txn = sanitizePayload(job.data);
@@ -123,102 +123,14 @@ async function handleTransactionJob(job, processorInstanceId) {
   heartbeat.unref();
 
   try {
-    return await processClaimedTransaction(
-      txn,
+    return await processClaimedTransaction({
+      transaction: txn,
       workerId,
-      processingTimeline
-    );
+      processingTimeline,
+    });
   } finally {
     clearInterval(heartbeat);
   }
-}
-
-async function processClaimedTransaction(txn, workerId, processingTimeline) {
-  const result = processTransaction(txn);
-
-  if (result.status === TransactionStatus.FAILED) {
-    throw new Error(result.reason || "Transaction processor failed");
-  }
-
-  if (result.status === TransactionStatus.DECLINED) {
-    const finalizedTxn = await finalizeTransactionProcessing(txn.id, workerId, {
-      status: TransactionStatus.DECLINED,
-      reason: result.reason,
-      workerId: 1,
-      processingTimeline: appendTimeline(
-        processingTimeline,
-        TransactionStatus.DECLINED,
-        `Transaction declined by processor: ${result.reason}`
-      ),
-    });
-
-    if (!finalizedTxn) {
-      return { skipped: true, reason: "Transaction finalization lost" };
-    }
-
-    return { skipped: false, status: TransactionStatus.DECLINED };
-  }
-
-  const route = routeTransaction(txn);
-
-  let finalResult;
-
-  if (route === "INTERNAL") {
-    finalResult = await handleInternal(txn);
-  } else if (route === "EXTERNAL_PROCESSOR" || route === "CARD_NETWORK") {
-    finalResult = handleExternal(txn);
-  } else {
-    finalResult = {
-      status: TransactionStatus.DECLINED,
-      reason: "Unsupported route",
-    };
-  }
-
-  if (finalResult.status === TransactionStatus.DECLINED) {
-    const finalizedTxn = await finalizeTransactionProcessing(txn.id, workerId, {
-      status: TransactionStatus.DECLINED,
-      route,
-      reason: finalResult.reason,
-      workerId: 1,
-      processingTimeline: appendTimeline(
-        processingTimeline,
-        TransactionStatus.DECLINED,
-        `Transaction declined by routed system: ${finalResult.reason}`
-      ),
-    });
-
-    if (!finalizedTxn) {
-      return { skipped: true, reason: "Transaction finalization lost" };
-    }
-
-    return { skipped: false, status: TransactionStatus.DECLINED };
-  }
-
-  if (route === "EXTERNAL_PROCESSOR" || route === "CARD_NETWORK") {
-    await saveSettlementRecord(txn, finalResult.status);
-  }
-
-  const finalizedTxn = await finalizeTransactionProcessing(txn.id, workerId, {
-    status: TransactionStatus.COMPLETED,
-    route,
-    result: finalResult,
-    workerId: 1,
-    processingTimeline: appendTimeline(
-      appendTimeline(
-        processingTimeline,
-        TransactionStatus.PROCESSING,
-        "BullMQ worker processed transaction"
-      ),
-      TransactionStatus.COMPLETED,
-      "Transaction processed successfully"
-    ),
-  });
-
-  if (!finalizedTxn) {
-    return { skipped: true, reason: "Transaction finalization lost" };
-  }
-
-  return { skipped: false, status: TransactionStatus.COMPLETED };
 }
 
 module.exports = {
