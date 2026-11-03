@@ -16,6 +16,7 @@ const pool = require("./db/connection");
 const app = express();
 
 const { evaluateRisk } = require("./risk/riskEngine");
+const { verifyPin } = require("./domain/paymentAuthorization");
 const { maskSensitiveData } = require("./utils/mask");
 const {
   sanitizeTransactionForPersistence,
@@ -169,9 +170,7 @@ app.post("/pay", apiKeyAuth, async (req, res) => {
 
     const txnId = crypto.randomUUID();
     const now = new Date().toISOString();
-    const requiresPin =
-      validatedTxn.issuerType === "INTERNAL" && validatedTxn.type !== "BALANCE_INQUIRY";
-    const pinVerified = requiresPin ? validatedTxn.pin === "TEST_PIN" : true;
+    const pinVerified = verifyPin(validatedTxn, "TEST_PIN");
 
     const fullTxn = sanitizeTransactionForPersistence({
       id: txnId,

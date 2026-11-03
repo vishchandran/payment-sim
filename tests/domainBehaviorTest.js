@@ -23,6 +23,12 @@ const {
   TransactionRoute,
   routeTransaction: routeDomainTransaction,
 } = require("../domain/transactionRouting");
+const {
+  authorizePin,
+  canAccessTransactionStatus,
+  requiresPin,
+  verifyPin,
+} = require("../domain/paymentAuthorization");
 const { routeTransaction } = require("../broker/router");
 const { processTransaction } = require("../processor/processor");
 const { evaluateRisk } = require("../risk/riskEngine");
@@ -183,6 +189,22 @@ function testRoutingRules() {
 }
 
 function testAuthorizationAndProcessorRules() {
+  assert.equal(requiresPin(payment()), true);
+  assert.equal(
+    requiresPin(payment({ type: TransactionType.BALANCE_INQUIRY })),
+    false
+  );
+  assert.equal(verifyPin(payment({ pin: "TEST_PIN" }), "TEST_PIN"), true);
+  assert.equal(verifyPin(payment({ pin: "WRONG" }), "TEST_PIN"), false);
+  assert.deepEqual(authorizePin({ pinVerified: true }), { status: "APPROVED" });
+  assert.equal(
+    canAccessTransactionStatus(
+      { type: "client", clientId: "merchant-a" },
+      { client_id: "merchant-a" }
+    ),
+    true
+  );
+
   assert.deepEqual(validatePIN({ pinVerified: true }), { status: "APPROVED" });
   assert.deepEqual(validatePIN({ pinVerified: false }), {
     status: "DECLINED",
