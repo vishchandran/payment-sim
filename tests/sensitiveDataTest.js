@@ -1,7 +1,6 @@
-process.env.API_KEYS = process.env.API_KEYS || "sensitive-client:sensitive-key";
-process.env.ADMIN_API_KEYS = process.env.ADMIN_API_KEYS || "sensitive-admin-key";
-process.env.CARD_FINGERPRINT_SECRET =
-  process.env.CARD_FINGERPRINT_SECRET || "sensitive-test-secret";
+process.env.API_KEYS = "sensitive-client:sensitive-key";
+process.env.ADMIN_API_KEYS = "sensitive-admin-key";
+process.env.CARD_FINGERPRINT_SECRET = "sensitive-test-secret";
 
 const crypto = require("crypto");
 const { app } = require("../app");

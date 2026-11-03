@@ -1,4 +1,4 @@
-process.env.ADMIN_API_KEYS = process.env.ADMIN_API_KEYS || "observability-admin-key";
+process.env.ADMIN_API_KEYS = "observability-admin-key";
 
 const { app } = require("../app");
 const pool = require("../db/connection");
